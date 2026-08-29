@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Patient Triage — End-to-End Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#E7ECEE; --panel:#FFFFFF; --panel-2:#F4F7F8;
+    --ink:#12262E; --ink-soft:#4B616B; --ink-faint:#7E9098;
+    --line:#D2DBDF; --line-soft:#E2E8EA;
+    --system:#0E7C86; --system-2:#0A9BAA; --system-bg:#E4F1F2;
+    --human:#1F6E56; --human-bg:#E6F0EB;
+    --alert:#DA6134; --alert-strong:#C6353F; --alert-bg:#FBEBE3;
+    --esi1:#C6353F; --esi2:#DE7A34; --esi3:#DFAF2A; --esi4:#4E9A6B; --esi5:#5B86AE;
+    --shadow:0 1px 2px rgba(18,38,46,.06),0 8px 24px -12px rgba(18,38,46,.18);
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1060px;margin:0 auto;padding:0 22px}
+  .mono{font-family:"IBM Plex Mono",monospace}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--system);font-weight:600}
+
+  /* ---------- HERO ---------- */
+  header.hero{padding:60px 0 34px;border-bottom:1px solid var(--line)}
+  .hero h1{font-family:"Space Grotesk",sans-serif;font-weight:700;
+    font-size:clamp(30px,5.4vw,52px);line-height:1.02;letter-spacing:-.02em;margin:14px 0 0}
+  .hero h1 .sub{display:block;color:var(--system);font-weight:600;font-size:.55em;
+    letter-spacing:-.01em;margin-top:10px}
+  .hero p.lede{font-size:clamp(15px,1.9vw,18.5px);color:var(--ink-soft);max-width:60ch;margin:18px 0 0}
+  .hero p.lede b{color:var(--ink);font-weight:600}
+  .flagline{margin-top:22px;display:flex;gap:12px;align-items:flex-start;
+    background:var(--alert-bg);border:1px solid #F0CDBC;border-radius:12px;
+    padding:13px 16px;max-width:64ch}
+  .flagline .dot{width:9px;height:9px;border-radius:50%;background:var(--alert-strong);
+    margin-top:7px;flex:none;box-shadow:0 0 0 4px rgba(198,53,63,.12)}
+  .flagline span{font-size:14px;color:#7c2c20}
+  .flagline b{color:var(--alert-strong)}
+
+  /* ESI legend */
+  .esi-legend{margin-top:26px}
+  .esi-legend .cap{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-faint);margin-bottom:9px}
+  .esi-scale{display:flex;flex-wrap:wrap;gap:7px}
+  .esi{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);
+    border-radius:999px;padding:5px 11px 5px 7px;font-size:12.5px}
+  .esi .sw{width:12px;height:12px;border-radius:3px}
+  .esi .lv{font-family:"IBM Plex Mono",monospace;font-weight:600}
+
+  /* ---------- SECTION SHELL ---------- */
+  section{padding:52px 0}
+  .sec-head{margin-bottom:30px;max-width:66ch}
+  .sec-head h2{font-family:"Space Grotesk",sans-serif;font-weight:600;
+    font-size:clamp(22px,3.2vw,30px);letter-spacing:-.015em;margin:8px 0 0}
+  .sec-head p{color:var(--ink-soft);margin:11px 0 0;font-size:15.5px}
+
+  /* legend for node types */
+  .typelegend{display:flex;flex-wrap:wrap;gap:14px;margin:26px 0 6px}
+  .tl{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft)}
+  .tl .bar{width:16px;height:16px;border-radius:5px;flex:none}
+  .tl.data .bar{background:var(--system)}
+  .tl.model .bar{background:#3B4E86}
+  .tl.safety .bar{background:var(--alert)}
+  .tl.human .bar{background:var(--human)}
+  .tl.loop .bar{background:var(--ink-faint)}
+
+  /* ---------- PIPELINE ---------- */
+  .pipe{position:relative;margin-top:8px}
+  .pipe::before{content:"";position:absolute;left:27px;top:12px;bottom:34px;width:2px;
+    background:linear-gradient(var(--system),#3B4E86 42%,var(--alert) 60%,var(--human) 78%,var(--ink-faint));
+    opacity:.35}
+  @media(max-width:640px){.pipe::before{left:19px}}
+
+  .node{position:relative;padding-left:66px;margin-bottom:14px}
+  @media(max-width:640px){.node{padding-left:50px}}
+  .node .num{position:absolute;left:0;top:0;width:56px;height:56px;border-radius:50%;
+    background:var(--panel);border:2px solid var(--line);display:flex;align-items:center;
+    justify-content:center;font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:19px;
+    color:var(--ink);z-index:2}
+  @media(max-width:640px){.node .num{width:40px;height:40px;font-size:15px}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);overflow:hidden;border-left:4px solid var(--line)}
+  .node.data .card{border-left-color:var(--system)}
+  .node.data .num{border-color:var(--system);color:var(--system)}
+  .node.model .card{border-left-color:#3B4E86}
+  .node.model .num{border-color:#3B4E86;color:#3B4E86}
+  .node.safety .card{border-left-color:var(--alert)}
+  .node.safety .num{border-color:var(--alert);color:var(--alert);
+    box-shadow:0 0 0 5px rgba(218,97,52,.10)}
+  .node.human .card{border-left-color:var(--human)}
+  .node.human .num{border-color:var(--human);color:var(--human)}
+  .node.loop .card{border-left-color:var(--ink-faint)}
+  .node.loop .num{border-color:var(--ink-faint);color:var(--ink-faint)}
+
+  .card > button.head{width:100%;text-align:left;background:none;border:0;cursor:pointer;
+    padding:17px 20px;display:flex;align-items:center;gap:14px;font-family:inherit;color:inherit}
+  .card > button.head:focus-visible{outline:2px solid var(--system);outline-offset:-3px}
+  .head .titles{flex:1;min-width:0}
+  .head .kicker{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-faint);font-weight:600}
+  .head .kicker.safety{color:var(--alert)}
+  .head .kicker.human{color:var(--human)}
+  .head h3{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:18px;
+    letter-spacing:-.01em;margin:3px 0 0}
+  .head .one{color:var(--ink-soft);font-size:13.5px;margin-top:3px}
+  .head .chev{flex:none;width:26px;height:26px;border-radius:50%;border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;color:var(--ink-faint);
+    transition:transform .25s ease,background .2s}
+  .head .chev svg{width:13px;height:13px}
+  .card.open .chev{transform:rotate(180deg);background:var(--panel-2)}
+  .badge{flex:none;font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;
+    letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:999px;
+    background:var(--alert-bg);color:var(--alert-strong);border:1px solid #F0CDBC}
+
+  .body{max-height:0;overflow:hidden;transition:max-height .35s ease}
+  .card.open .body{max-height:760px}
+  .body-inner{padding:2px 20px 20px;border-top:1px solid var(--line-soft);margin-top:0}
+  .body-inner > .lead{color:var(--ink);font-size:14.5px;margin:15px 0 0}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+  @media(max-width:560px){.grid{grid-template-columns:1fr}}
+  .kv .lab{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px;font-weight:600}
+  .kv .val{font-size:13.5px;color:var(--ink-soft)}
+  .kv .val code{font-family:"IBM Plex Mono",monospace;background:var(--panel-2);
+    border:1px solid var(--line-soft);border-radius:5px;padding:1px 5px;font-size:12px;color:var(--ink)}
+  .why{margin-top:16px;background:var(--panel-2);border-radius:10px;padding:12px 14px;
+    font-size:13.5px;color:var(--ink-soft);border:1px solid var(--line-soft)}
+  .why b{color:var(--ink)}
+  .why.safety{background:var(--alert-bg);border-color:#F0CDBC;color:#7c3320}
+  .why.safety b{color:var(--alert-strong)}
+
+  /* ---------- TRACE ---------- */
+  .trace-wrap{background:var(--ink);border-radius:18px;padding:26px;color:#DCE6E8;
+    box-shadow:var(--shadow)}
+  .trace-top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;
+    margin-bottom:22px}
+  .trace-top .t{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:17px;color:#fff}
+  .pt-switch{display:flex;gap:8px;flex-wrap:wrap}
+  .pt-btn{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500;cursor:pointer;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);color:#BFD0D3;
+    padding:9px 14px;border-radius:10px;transition:.18s;text-align:left;line-height:1.3}
+  .pt-btn b{display:block;color:#fff;font-family:"IBM Plex Sans",sans-serif;font-size:13px;font-weight:600}
+  .pt-btn:hover{border-color:rgba(255,255,255,.34)}
+  .pt-btn.active{background:var(--system);border-color:var(--system-2);color:#eafafa}
+  .pt-btn.active b{color:#fff}
+  .pt-btn:focus-visible{outline:2px solid var(--system-2);outline-offset:2px}
+
+  /* mini flow */
+  .flow{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:22px}
+  .step{flex:1;min-width:88px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);
+    border-radius:9px;padding:9px 8px;transition:.3s}
+  .step .sn{font-family:"IBM Plex Mono",monospace;font-size:10px;color:#7f979c}
+  .step .st{font-size:11.5px;color:#AEC2C5;margin-top:3px;line-height:1.25}
+  .step.lit{background:rgba(14,124,134,.28);border-color:var(--system-2)}
+  .step.lit .st{color:#eafafa}
+  .step.flag{background:rgba(218,97,52,.26);border-color:var(--alert)}
+  .step.flag .st{color:#ffdfd1}
+
+  .monitor{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:620px){.monitor{grid-template-columns:1fr}}
+  .mon-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);
+    border-radius:12px;padding:16px}
+  .mon-card h4{margin:0 0 12px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;
+    letter-spacing:.14em;text-transform:uppercase;color:#8aa2a6;font-weight:600}
+  .vitals{display:grid;grid-template-columns:1fr 1fr;gap:9px 14px}
+  .vital{display:flex;justify-content:space-between;align-items:baseline;
+    border-bottom:1px dashed rgba(255,255,255,.10);padding-bottom:5px}
+  .vital .vl{font-size:12px;color:#93a9ad}
+  .vital .vv{font-family:"IBM Plex Mono",monospace;font-size:14px;font-weight:600;color:#eef6f7}
+  .vital .vv.warn{color:#f4a985}
+  .vital .vv.bad{color:#f08a7f}
+  .cc{margin-top:13px;font-size:12.5px;color:#c9d8da;font-style:italic;
+    border-left:2px solid var(--system-2);padding-left:10px}
+
+  .readout .row{margin-bottom:15px}
+  .readout .rl{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:#8aa2a6;margin-bottom:6px}
+  .acuity-chip{display:inline-flex;align-items:center;gap:8px;font-family:"IBM Plex Mono",monospace;
+    font-weight:600;font-size:13px;padding:6px 12px;border-radius:8px;color:#12262E}
+  .risk-bar{height:9px;border-radius:5px;background:rgba(255,255,255,.10);overflow:hidden;margin-top:4px}
+  .risk-bar > i{display:block;height:100%;border-radius:5px;transition:width .5s ease}
+  .riskrow{margin-bottom:9px}
+  .riskrow .rr-top{display:flex;justify-content:space-between;font-size:11.5px;color:#a9bcbf;margin-bottom:2px}
+  .riskrow .rr-top b{font-family:"IBM Plex Mono",monospace;color:#dce8ea}
+  .verdict{margin-top:8px;border-radius:10px;padding:13px 15px;font-size:13px;line-height:1.5}
+  .verdict.ok{background:rgba(31,110,86,.22);border:1px solid #2e7d63;color:#c7ead9}
+  .verdict.catch{background:rgba(218,97,52,.20);border:1px solid var(--alert);color:#ffd9c8}
+  .verdict .vh{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:13.5px;
+    display:block;margin-bottom:4px}
+  .verdict.ok .vh{color:#9fe0c4}
+  .verdict.catch .vh{color:#ffb693}
+
+  /* ---------- PRINCIPLES ---------- */
+  .princ{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:720px){.princ{grid-template-columns:1fr}}
+  .pc{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;box-shadow:var(--shadow)}
+  .pc .pn{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--system);font-weight:600}
+  .pc h3{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:16.5px;margin:8px 0 7px}
+  .pc p{margin:0;font-size:13.5px;color:var(--ink-soft)}
+
+  footer{border-top:1px solid var(--line);padding:30px 0 60px}
+  footer p{font-size:12.5px;color:var(--ink-faint);max-width:70ch;margin:0}
+  footer a{color:var(--system)}
+
+  @media(prefers-reduced-motion:reduce){
+    *{transition:none!important;scroll-behavior:auto!important}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Accenture Innovation Challenge · PS2 · PatientTriage.ai</div>
+    <h1>From door to decision
+      <span class="sub">the triage pipeline, one stage at a time</span>
+    </h1>
+    <p class="lede">An emergency department turns a patient's first two minutes into a priority.
+      This pipeline does the same — turning sparse arrival data into a <b>recommendation the nurse
+      decides on</b>, and specializing in the one failure that actually harms people:
+      the patient who <b>looks fine but isn't</b>.</p>
+
+    <div class="flagline">
+      <span class="dot"></span>
+      <span><b>The target isn't speed — it's undertriage.</b> Overcrowded EDs mis-sort patients under
+      pressure, and the deadly error is sending a quietly-deteriorating patient to the low-priority
+      queue. Everything here is built around catching that.</span>
+    </div>
+
+    <div class="esi-legend">
+      <div class="cap">Acuity scale · used as real data encoding throughout (Emergency Severity Index)</div>
+      <div class="esi-scale">
+        <span class="esi"><span class="sw" style="background:var(--esi1)"></span><span class="lv">ESI 1</span> Resuscitation</span>
+        <span class="esi"><span class="sw" style="background:var(--esi2)"></span><span class="lv">ESI 2</span> Emergent</span>
+        <span class="esi"><span class="sw" style="background:var(--esi3)"></span><span class="lv">ESI 3</span> Urgent</span>
+        <span class="esi"><span class="sw" style="background:var(--esi4)"></span><span class="lv">ESI 4</span> Less urgent</span>
+        <span class="esi"><span class="sw" style="background:var(--esi5)"></span><span class="lv">ESI 5</span> Non-urgent</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">The pipeline</div>
+      <h2>Nine stages, three of them the whole point</h2>
+      <p>Tap any stage to open it. Most of the pipeline is standard clinical-ML plumbing — the
+      colored-apart stages (5, 8) plus the human pivot (7) are what make this a safety system rather
+      than "a better acuity predictor."</p>
+    </div>
+
+    <div class="typelegend">
+      <div class="tl data"><span class="bar"></span>Data &amp; features</div>
+      <div class="tl model"><span class="bar"></span>Model core</div>
+      <div class="tl safety"><span class="bar"></span>Safety layer (the wedge)</div>
+      <div class="tl human"><span class="bar"></span>Human decision</div>
+      <div class="tl loop"><span class="bar"></span>Feedback loop</div>
+    </div>
+
+    <div class="pipe" id="pipe"><!-- nodes injected --></div>
+  </div>
+</section>
+
+<section style="background:var(--panel-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Watch it work</div>
+      <h2>Two patients, same pipeline</h2>
+      <p>The system earns its keep on the second patient. Switch between them and watch which stages
+      light up — and where the Undertriage Catcher intercepts.</p>
+    </div>
+
+    <div class="trace-wrap">
+      <div class="trace-top">
+        <div class="t">Triage monitor</div>
+        <div class="pt-switch" role="group" aria-label="Choose a patient">
+          <button class="pt-btn active" data-pt="0"><span class="mono">CASE A</span><b>Obvious critical</b></button>
+          <button class="pt-btn" data-pt="1"><span class="mono">CASE B</span><b>Looks fine, isn't</b></button>
+        </div>
+      </div>
+
+      <div class="flow" id="flow"><!-- mini steps injected --></div>
+
+      <div class="monitor">
+        <div class="mon-card">
+          <h4>Arrival snapshot · first minutes</h4>
+          <div class="vitals" id="vitals"></div>
+          <div class="cc" id="cc"></div>
+        </div>
+        <div class="mon-card readout">
+          <div class="row">
+            <div class="rl">Surface read — what a rushed triage sees</div>
+            <div id="surface"></div>
+          </div>
+          <div class="row">
+            <div class="rl">Hidden-risk channels — what the model sees</div>
+            <div id="risks"></div>
+          </div>
+          <div id="verdict"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Non-negotiables</div>
+      <h2>Three principles the whole design answers to</h2>
+      <p>These are also the exact questions the problem statement tells you to think about — so every
+      slide and every design choice should trace back to one of them.</p>
+    </div>
+    <div class="princ">
+      <div class="pc">
+        <div class="pn">Decide vs. recommend</div>
+        <h3>The nurse always makes the call</h3>
+        <p>The system recommends a priority and raises flags. It never auto-assigns final acuity.
+        One tap to accept, one to override — the human stays the decision-maker and the accountable party.</p>
+      </div>
+      <div class="pc">
+        <div class="pn">Design for the worst case</div>
+        <h3>Tuned against the fatal miss</h3>
+        <p>The safety layer is deliberately asymmetric: it tolerates false alarms to avoid ever missing
+        a deteriorating patient. A false alarm costs minutes; a missed sick patient costs a life.</p>
+      </div>
+      <div class="pc">
+        <div class="pn">Humans in the lead</div>
+        <h3>Oversight that stays real</h3>
+        <p>The Over-Trust Guard watches whether nurses genuinely engage or rubber-stamp under load,
+        and calibrates accordingly — so "human-in-the-loop" never quietly becomes reflexive clicking.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Concept explainer for Round 1 planning. Illustrative pipeline grounded in ED-triage literature
+    (chief-complaint NLP, mode-of-arrival and shock-index as early signals, undertriage as the primary
+    harm). Not a clinical device; decision-support only. Patient cases are synthetic. Prototype data
+    target: MIMIC-IV-ED via PhysioNet.</p>
+  </div>
+</footer>
+
+<script>
+/* ---------------- PIPELINE DATA ---------------- */
+const STAGES=[
+ {t:"data",kick:"First minutes",title:"Arrival & data capture",
+  one:"Grab what's actually available the moment the patient hits the door.",
+  lead:"Triage runs on whatever can be gathered in ~2 minutes — not a full workup. The design starts by being honest about that sparse, messy input.",
+  kv:[["Inputs captured","Age, sex, <code>arrival mode</code> (walk-in vs ambulance — one of the strongest single predictors), free-text chief complaint, vitals (HR, BP, RR, SpO₂, temp), pain score, quick EHR history if the patient is known."],
+      ["Design rule","Build for incomplete input. A sick patient often arrives with half the fields blank — never treat <code>missing</code> as <code>normal</code>."]],
+  why:["Everything downstream is bounded by what you can capture fast. Get the inputs right and honest, or the smartest model downstream is guessing.",false]},
+
+ {t:"data",kick:"Structuring",title:"Feature engineering",
+  one:"Turn raw captured data into model-ready signals.",
+  lead:"Raw vitals are weaker than what you can derive from them. This stage builds the features the literature shows actually carry the risk.",
+  kv:[["Derived signals","<code>shock index</code> = HR ÷ SBP, <code>pulse pressure</code>, age as a continuous variable (not a blunt cutoff), vital-sign trend if repeated."],
+      ["Missing data","Impute carefully and keep a <code>missingness flag</code> — the fact that a value is absent is itself information."]],
+  why:["Derived signals like shock index and pulse pressure often out-predict raw blood pressure alone. Feature quality, not model choice, is usually where accuracy is won or lost.",false]},
+
+ {t:"data",kick:"Unstructured",title:"Chief-complaint NLP",
+  one:"Read the free-text complaint and extract clinical meaning.",
+  lead:"The story is in the words. A calm vitals panel next to \u201cchest tightness, sweaty, short of breath\u201d is exactly the trap a numbers-only model walks into.",
+  kv:[["What it does","Maps free text \u2192 structured risk concepts (e.g. \u201cchest tightness + diaphoretic\u201d \u2192 possible ACS) using clinical embeddings or a language model."],
+      ["Why text","Studies adding the chief complaint (TextRNN, TransNet, BERT) consistently lift predictive performance over structured data alone."]],
+  why:["Fusing the complaint text with the vitals is what lets later stages spot the mismatch between how a patient looks and what they're actually saying.",false]},
+
+ {t:"model",kick:"Model core",title:"Multi-outcome risk prediction",
+  one:"Predict several calibrated risks — not one acuity number.",
+  lead:"The crucial design choice: don't collapse everything into a single \u201cacuity score.\u201d Output separate, calibrated probability channels, because the safety layer needs them to catch mismatches.",
+  kv:[["Model","Gradient-boosted trees (XGBoost/LightGBM) on the fused structured + text features. Calibrated probabilities, not raw scores."],
+      ["Outputs","Recommended acuity (ESI 1\u20135) · critical-care / deterioration risk · admission likelihood · red-flag syndromes (sepsis, ACS, stroke)."]],
+  why:["A single acuity guess hides its own reasoning. Separate risk channels are precisely what make undertriage detectable in the next stage.",false]},
+
+ {t:"safety",kick:"The wedge · safety",title:"The Undertriage Catcher",one:"Flag the patient who looks low-acuity but carries high hidden risk.",badge:"Core idea",
+  lead:"This is why the system exists. It doesn't just report acuity — it compares the surface impression (what a rushed triage would assign) against the model's hidden-risk channels, and raises a flag when they disagree in the dangerous direction.",
+  kv:[["The check","<code>surface_acuity = low</code> AND <code>hidden_risk = high</code> \u2192 raise undertriage flag and pull the case up for a look."],
+      ["Asymmetric by design","Tuned for high sensitivity on catastrophic misses. It accepts more false alarms to avoid ever missing a deteriorating patient."]],
+  why:["Undertriage is the failure that kills people in the waiting room. Catching it \u2014 not shaving seconds off average throughput \u2014 is what separates this from \u201ca better ESI predictor.\u201d",true]},
+
+ {t:"model",kick:"Explainability",title:"Rationale & explanation",
+  one:"Turn the flag into a human-readable \u201cwhy I'm worried.\u201d",
+  lead:"An opaque alarm gets ignored or resented. This stage makes the reasoning legible so the nurse can weigh it in seconds.",
+  kv:[["How","Feature attributions (SHAP) name the drivers; a language layer narrates them in plain clinical terms."],
+      ["Example output","\u201cFlagging despite a calm presentation \u2014 rising shock index + \u2018weak, feverish\u2019 + RR 22 \u2192 early-sepsis pattern.\u201d"]],
+  why:["Trust is earned by reasons, not scores. A rationale keeps the nurse informed and in control instead of being told what to do by a black box.",false]},
+
+ {t:"human",kick:"The pivot · human",title:"Decision support & the human call",one:"Recommendation, flag, and rationale surface to the nurse — who decides.",
+  lead:"Everything converges on one clean panel. The system presents; the human decides. It never assigns final acuity itself.",
+  kv:[["What the nurse sees","Recommended priority · any undertriage flag · the one-line rationale · accept or override in a single tap."],
+      ["The boundary","This is the decide-vs-recommend line, drawn in the architecture — both the ethical line and the liability line."]],
+  why:["\u201cHumans in the lead\u201d isn't a slogan here \u2014 it's the wiring. The machine advises; the clinician remains the decision-maker and the accountable party.",false]},
+
+ {t:"safety",kick:"The wedge · safety",title:"The Over-Trust Guard",one:"Watch whether oversight stays real or decays into rubber-stamping.",badge:"Fresh angle",
+  lead:"The subtle failure of every human-in-the-loop system: under pressure, the human stops truly reviewing and just clicks accept. This stage watches for exactly that.",
+  kv:[["What it tracks","Accept/override patterns per nurse and per shift; how fast flags are dismissed; drift toward reflexive acceptance."],
+      ["What it does","Calibrates how assertively it flags, and drops in occasional calibration probes to keep engagement honest."]],
+  why:["The moment oversight becomes reflexive clicking, \u201chuman-in-the-loop\u201d is a fiction. Guarding against that is the least-built, most defensible idea in the whole design.",true]},
+
+ {t:"loop",kick:"Feedback",title:"Continuous monitoring & learning",
+  one:"Keep watching waiting patients; feed outcomes back.",
+  lead:"Patients don't stop existing after triage. The most dangerous window is often the unwatched wait afterward.",
+  kv:[["Re-scoring","As new vitals stream in during the wait, re-run deterioration risk \u2014 even a few minutes of monitoring sharpens early-decompensation prediction."],
+      ["The loop","Actual outcomes feed back to monitor model drift, check for bias across groups, and re-calibrate the safety thresholds."]],
+  why:["A one-shot decision at the door isn't enough. Closing the loop is what turns a triage model into a system that keeps a patient safe through the whole wait.",false]}
+];
+
+/* icons */
+const CHEV='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+
+/* render pipeline */
+const pipe=document.getElementById('pipe');
+STAGES.forEach((s,i)=>{
+  const node=document.createElement('div');
+  node.className='node '+s.t;
+  const kicker='kicker'+(s.t==='safety'?' safety':s.t==='human'?' human':'');
+  node.innerHTML=`
+    <div class="num">${i+1}</div>
+    <div class="card" id="card${i}">
+      <button class="head" aria-expanded="false" aria-controls="body${i}">
+        <div class="titles">
+          <div class="${kicker}">${s.kick}</div>
+          <h3>${s.title}</h3>
+          <div class="one">${s.one}</div>
+        </div>
+        ${s.badge?`<span class="badge">${s.badge}</span>`:''}
+        <span class="chev">${CHEV}</span>
+      </button>
+      <div class="body" id="body${i}">
+        <div class="body-inner">
+          <p class="lead">${s.lead}</p>
+          <div class="grid">
+            ${s.kv.map(k=>`<div class="kv"><div class="lab">${k[0]}</div><div class="val">${k[1]}</div></div>`).join('')}
+          </div>
+          <div class="why${s.why[1]?' safety':''}"><b>Why it matters.</b> ${s.why[0]}</div>
+        </div>
+      </div>
+    </div>`;
+  pipe.appendChild(node);
+});
+pipe.querySelectorAll('.head').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const card=btn.closest('.card');
+    const open=card.classList.toggle('open');
+    btn.setAttribute('aria-expanded',open);
+  });
+});
+
+/* ---------------- TRACE DATA ---------------- */
+const ACU={1:{c:'var(--esi1)',n:'ESI 1'},2:{c:'var(--esi2)',n:'ESI 2'},3:{c:'var(--esi3)',n:'ESI 3'},4:{c:'var(--esi4)',n:'ESI 4'},5:{c:'var(--esi5)',n:'ESI 5'}};
+const SHORT=["Arrival","Features","NLP","Risk model","Undertriage","Rationale","Nurse","Over-trust","Monitor"];
+
+const PATIENTS=[
+ { vitals:[["HR","132","bad"],["BP","82/54","bad"],["RR","28","bad"],["SpO₂","86%","bad"],["Temp","36.4","warn"],["Pain","9/10","warn"]],
+   cc:"\u201cCrushing chest pain, can't breathe\u201d — arrived by ambulance.",
+   surface:2, // even the surface read is high
+   risks:[["Critical-care / deterioration",0.94,'bad'],["Acute coronary syndrome",0.88,'bad'],["Admission likely",0.9,'warn']],
+   lit:[0,1,2,3,5,6,8], // stages that meaningfully fire (catcher stays quiet - already high acuity)
+   verdict:["ok","No catch needed — and that's correct","Every channel already screams critical, so a rushed nurse and the model agree: top priority. The Undertriage Catcher stays silent because there's no dangerous mismatch to flag. The system adds speed and a clean handoff, not a save."]},
+
+ { vitals:[["HR","104","warn"],["BP","108/72",""],["RR","22","warn"],["SpO₂","95%",""],["Temp","38.1","warn"],["Pain","4/10",""]],
+   cc:"\u201cJust feeling weak and a bit feverish, off for a couple days.\u201d — walked in.",
+   surface:4, // looks low acuity
+   risks:[["Early sepsis pattern",0.71,'bad'],["Critical-care / deterioration",0.58,'warn'],["Admission likely",0.63,'warn']],
+   lit:[0,1,2,3,4,5,6,7,8],
+   verdict:["catch","Undertriage caught","On the surface this reads ESI 4 — borderline-normal vitals, a vague complaint, a walk-in. But the hidden channels disagree: a creeping shock index, RR 22, fever and \u2018weak\u2019 together form an early-sepsis pattern. The Catcher flags the mismatch, the nurse sees a reasoned \u2018why\u2019, and a patient who'd have waited gets pulled forward. This is the entire thesis in one case."]},
+];
+
+const flow=document.getElementById('flow');
+SHORT.forEach((s,i)=>{
+  const d=document.createElement('div');
+  d.className='step';d.id='step'+i;
+  d.innerHTML=`<div class="sn mono">${String(i+1).padStart(2,'0')}</div><div class="st">${s}</div>`;
+  flow.appendChild(d);
+});
+
+function riskColor(k){return k==='bad'?'#e2705a':k==='warn'?'#e2a95a':'#54a9a0';}
+
+function render(pt){
+  const p=PATIENTS[pt];
+  // vitals
+  document.getElementById('vitals').innerHTML=p.vitals.map(v=>
+    `<div class="vital"><span class="vl">${v[0]}</span><span class="vv ${v[2]}">${v[1]}</span></div>`).join('');
+  document.getElementById('cc').textContent=p.cc;
+  // surface
+  const a=ACU[p.surface];
+  document.getElementById('surface').innerHTML=
+    `<span class="acuity-chip" style="background:${a.c}">${a.n} — ${p.surface>=4?'low priority':'high priority'}</span>`;
+  // risks
+  document.getElementById('risks').innerHTML=p.risks.map(r=>`
+    <div class="riskrow">
+      <div class="rr-top"><span>${r[0]}</span><b>${Math.round(r[1]*100)}%</b></div>
+      <div class="risk-bar"><i style="width:${r[1]*100}%;background:${riskColor(r[2])}"></i></div>
+    </div>`).join('');
+  // verdict
+  const v=p.verdict;
+  document.getElementById('verdict').innerHTML=
+    `<div class="verdict ${v[0]}"><span class="vh">${v[1]}</span>${v[2]}</div>`;
+  // flow lighting
+  SHORT.forEach((_,i)=>{
+    const el=document.getElementById('step'+i);
+    el.className='step';
+    if(p.lit.includes(i)) el.classList.add('lit');
+  });
+  if(p.verdict[0]==='catch'){ // highlight the catcher + guard as flag
+    document.getElementById('step4').classList.remove('lit');
+    document.getElementById('step4').classList.add('flag');
+    document.getElementById('step7').classList.add('flag');
+    document.getElementById('step7').classList.remove('lit');
+  }
+}
+
+document.querySelectorAll('.pt-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.pt-btn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    render(+b.dataset.pt);
+  });
+});
+render(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+# ==========================================
+# PatientTriage.ai - Root .gitignore
+# ==========================================
+
+# 1. OS & IDE
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 2. Node.js & Frontend (Vite/React)
+triage-app/node_modules/
+triage-app/dist/
+triage-app/dist-ssr/
+triage-app/*.local
+triage-app/.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 3. Python & Backend (FastAPI)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/env/
+backend/build/
+backend/develop-eggs/
+backend/dist/
+backend/downloads/
+backend/eggs/
+backend/.eggs/
+backend/lib/
+backend/lib64/
+backend/parts/
+backend/sdist/
+backend/var/
+backend/wheels/
+backend/share/python-wheels/
+backend/*.egg-info/
+backend/.installed.cfg
+backend/*.egg
+backend/MANIFEST
+
+# Virtual environments
+backend/venv/
+backend/.venv/
+backend/ENV/
+backend/env.bak/
+backend/venv.bak/
+
+# 4. Database & Environment Variables
+# We ignore the SQLite DB because seed.py generates it automatically on startup
+backend/data/*.db
+backend/data/*.sqlite3
+.env
+.env.*
+!.env.example

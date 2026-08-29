@@ -1,0 +1,7 @@
+fastapi[standard]>=0.115.0
+uvicorn[standard]>=0.35.0
+sqlalchemy>=2.0.25
+aiosqlite>=0.22.0
+pydantic>=2.0
+websockets>=15.0
+alembic>=1.17.0
