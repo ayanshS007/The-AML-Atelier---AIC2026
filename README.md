@@ -7,9 +7,8 @@
 
 ---
 
-## 🎥 Demonstration Video
-*(Link your video recording here so judges can see the app in action!)*  
-**[Watch the Prototype Demo Video Here]**
+## 🎥 Demonstration Video 
+**(https://www.loom.com/share/ba42df8f7701410984d585856dbbd9a7)**
 
 ---
 
